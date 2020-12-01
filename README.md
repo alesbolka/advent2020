@@ -1,0 +1,1 @@
+My advent of code 2020 attempt, revisiting python.
