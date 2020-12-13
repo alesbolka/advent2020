@@ -1,0 +1,2 @@
+Part 2 was not solved without help - I made a bruteforce solution, which was simply not efficient (I even let it run while i was away for 10min and it did not finish). In the end, I looked for tips and found someone explaining how you can find the solution in the same approach I was taking, it was just safe to increment the step by more than the largest element bus ID on the list (which was my initial solution).
+Instead of making it adapt to non-prime lists, I just added a check.
