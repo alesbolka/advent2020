@@ -7,6 +7,7 @@ def parse_rule(text):
 
 def validate_ticket(ticket, rules):
   err = 0
+  had_errors = False
   for num in ticket:
     match = False
     for name in rules:
@@ -19,8 +20,9 @@ def validate_ticket(ticket, rules):
           break
 
     if not match:
+      had_errors = True
       err += num
-  return err
+  return err, had_errors
 
 def parse_tickets(raw_input):
   rules = {}
@@ -47,9 +49,11 @@ def parse_tickets(raw_input):
 
     if len(parts) < 2:
       ticket = [int(xx) for xx in row.split(",")]
-      invalid_rate = validate_ticket(ticket, rules)
+
+      invalid_rate, had_errs = validate_ticket(ticket, rules)
       err_rate += invalid_rate
-      if invalid_rate > 0:
+
+      if had_errs > 0:
         continue
       valid_tickets.append(ticket)
     elif len(parts[1]) > 0:
@@ -76,36 +80,82 @@ def identify_fields(rules, tickets):
     return {}
 
 
-  mem = {}
+  by_pos = {}
+  by_rule = {}
+  res = {}
+
   for pos in range(len(tickets[0])):
-    # if pos != 6:
-    #   continue
-
-
+    if pos not in by_pos:
+      by_pos[pos] = []
 
     values = [ticket[pos] for ticket in tickets]
     for name, pairs in rules.items():
-      if name not in mem:
-        mem[name] = []
+      if name not in by_rule:
+        by_rule[name] = []
 
       if validate_position(values, pairs):
-        mem[name].append(pos)
+        by_pos[pos].append(name)
+        by_rule[name].append(pos)
 
-  combos = list(mem.items())
-  combos.sort(key=lambda it: len(it[1]))
+  by_pos = list(by_pos.items())
+  by_pos.sort(key=lambda it: len(it[1]))
+  by_rule = list(by_rule.items())
+  by_rule.sort(key=lambda it: len(it[1]))
 
-  res = {}
-  for ii in range(len(combos)):
-    pos, possible = combos[ii]
-    print(pos, len(possible), possible)
+  abort_time = len(by_pos) + len(by_rule) + 2
+  xx = 0
+  while len(by_pos) > 0 or len(by_rule) > 0:
+    xx += 1
+    if xx > abort_time:
+      raise Exception("too many iterations")
 
-    # if len(possible) != 1:
-      # print(pos, possible)
-      # raise Exception("Mistakes were made")
+    if len(by_pos) > 0:
+      el = by_pos[0]
 
-    # res[pos] = possible[0]
+      if len(el[1]) < 1:
+        by_pos.pop(0)
+        continue
 
-    # for jj in range(ii + 1, len(combos)):
-    #   combos[jj][1].remove(possible[0])
+      if len(el[1]) == 1:
+        name = el[1][0]
+        pos = el[0]
+        by_pos.pop(0)
+
+        res[name] = pos
+        for ii in range(len(by_pos)):
+          if name in by_pos[ii][1]:
+            by_pos[ii][1].remove(name)
+        for ii in range(len(by_rule)):
+          if pos in by_rule[ii][1]:
+            by_rule[ii][1].remove(pos)
+        continue
+
+    if len(by_rule) > 0:
+      el = by_rule[0]
+
+      if len(el[1]) < 1:
+        by_rule.pop(0)
+        continue
+
+      if len(el[1]) == 1:
+        pos = el[1][0]
+        name = el[0]
+        by_rule.pop(0)
+        res[name] = pos
+        for ii in range(len(by_pos)):
+          if name in by_pos[ii][1]:
+            by_pos[ii][1].remove(name)
+        for ii in range(len(by_rule)):
+          if pos in by_rule[ii][1]:
+            by_rule[ii][1].remove(pos)
+        continue
+
+  return res
+
+def multiply_departure_fields(ticket, legend):
+  res = 1
+  for field in legend:
+    if field.startswith("departure"):
+      res *= ticket[legend[field]]
 
   return res
