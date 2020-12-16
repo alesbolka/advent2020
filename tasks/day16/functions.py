@@ -57,4 +57,55 @@ def parse_tickets(raw_input):
     else:
       raise Exception("invalid input {}".format(row))
 
-  return err_rate, my_ticket, valid_tickets
+  return err_rate, my_ticket, valid_tickets, rules
+
+def validate_position(numbers, rules):
+  for num in numbers:
+    match = False
+    for low, high in rules:
+      if low <= num and num <= high:
+        match = True
+
+    if not match:
+      return False
+
+  return True
+
+def identify_fields(rules, tickets):
+  if len(tickets) < 1:
+    return {}
+
+
+  mem = {}
+  for pos in range(len(tickets[0])):
+    # if pos != 6:
+    #   continue
+
+
+
+    values = [ticket[pos] for ticket in tickets]
+    for name, pairs in rules.items():
+      if name not in mem:
+        mem[name] = []
+
+      if validate_position(values, pairs):
+        mem[name].append(pos)
+
+  combos = list(mem.items())
+  combos.sort(key=lambda it: len(it[1]))
+
+  res = {}
+  for ii in range(len(combos)):
+    pos, possible = combos[ii]
+    print(pos, len(possible), possible)
+
+    # if len(possible) != 1:
+      # print(pos, possible)
+      # raise Exception("Mistakes were made")
+
+    # res[pos] = possible[0]
+
+    # for jj in range(ii + 1, len(combos)):
+    #   combos[jj][1].remove(possible[0])
+
+  return res
