@@ -1,10 +1,12 @@
 from itertools import product
 
 class Matrix:
-  def __init__(self, raw):
+  def __init__(self, raw, dimensions):
     self.on = [3]
     self.off = [2, 3]
     self.active = {}
+    self.dimensions = dimensions
+    self.neighbour_map = {}
 
 
     for yy, row in enumerate(raw):
@@ -12,13 +14,19 @@ class Matrix:
         if state == "#":
           yy = int(yy)
           xx = int(xx)
-          self.active[(xx, yy, 0)] = 1
 
-  def get_neighbours(self, xx, yy, zz):
-    src = (xx, yy, zz)
-    return [combo for combo in product([xx-1, xx, xx+1], [yy-1, yy, yy+1], [zz-1, zz, zz+1]) if combo != src]
+          self.active[((xx,yy) + tuple(0 for _ in range(dimensions - 2)))] = 1
+
+  def get_neighbours(self, src):
+    if src not in self.neighbour_map:
+      combinations = [[xx-1, xx, xx+1] for xx in src]
+      self.neighbour_map[src] = [combo for combo in product(*combinations) if combo != src]
+
+    return self.neighbour_map[src]
 
   def __str__(self):
+    if self.dimensions != 3:
+      return "output only works for 3 dimensions"
     xs = [xx for (xx, yy, zz) in self.active]
     ys = [yy for (xx, yy, zz) in self.active]
     zs = [zz for (xx, yy, zz) in self.active]
@@ -52,11 +60,11 @@ class Matrix:
     checked = {}
 
     for current in self.active.keys():
-      neighbours = self.get_neighbours(*current)
+      neighbours = self.get_neighbours(current)
       self.validate_node(current, neighbours, checked, new_active)
 
       for other in neighbours:
-        nei2 = self.get_neighbours(*other)
+        nei2 = self.get_neighbours(other)
         self.validate_node(other, nei2, checked, new_active)
 
     self.active = new_active
