@@ -34,9 +34,10 @@ class Image:
   def __init__(self, img_id, content):
     self.id = img_id
     self.content = content
+
     l_x, l_y = len(content[0]), len(content)
     if l_x != l_y:
-      raise Exception("Mismatches image dimensions")
+      raise Exception("Mismatched image dimensions")
 
     edges = {
       TT: content[0], # top
@@ -52,22 +53,31 @@ class Image:
       { TT: edges[BB][::-1], RR: edges[LL][::-1], BB: edges[TT][::-1], LL: edges[RR][::-1] }, # double axis flip
     ]
 
-    expected = {
-      TT: "..#.###...",
-      BB: ".##...####",
-      RR: ".####....#",
-      LL: ".#.#.###.."
-    }
+    self.flips = [
+      deepcopy(self.content),
+      [row for row in self.content[::-1]],
+      [row[::-1] for row in self.content],
+      [row[::-1] for row in self.content[::-1]],
+    ]
 
     for jj in range(4):
       tmp = deepcopy(self.combos[jj])
+      img_tmp = deepcopy(self.flips[jj])
       for ii in range(1,4):
         tmp = { (xx + 1) % 4: tmp[xx] for xx in tmp }
         tmp[TT] = tmp[TT][::-1]
         tmp[BB] = tmp[BB][::-1]
+        new_img = []
+        for xx in range(l_x):
+          new_row = ""
+          for yy in range(l_y):
+            new_row += img_tmp[l_y - 1 - yy][xx]
+          new_img.append(new_row)
+        img_tmp = new_img
+
         if tmp not in self.combos:
           self.combos.append(tmp)
-
+          self.flips.append(img_tmp)
 
     self.active = self.combos[0]
 
@@ -88,6 +98,8 @@ class Image:
     self.active = orientation
     return self
 
+  def correct_image(self):
+    return self.flips[self.combos.index(self.active)]
 
 class Collection:
   def __init__(self):
@@ -115,7 +127,18 @@ class Collection:
     self.coords.remove(center)
 
     order = self.get_order(center)
-    return self.full_check(center, order)
+    layout = self.full_check(center, order)
+    if not layout:
+      return None
+
+    img = self.build_images(layout)
+
+    aa = int(layout[(0, 0)].id)
+    bb = int(layout[(self.max, 0)].id)
+    cc = int(layout[(0, self.max)].id)
+    dd = int(layout[(self.max, self.max)].id)
+
+    return (aa * bb * cc * dd, img)
 
   def get_order(self, start: Coords) -> ProcessOrder:
     order = []
@@ -141,12 +164,7 @@ class Collection:
         }
         correct = self.rec_check(layout, order)
         if correct:
-          xx = self.max
-          aa = int(correct[(0, 0)].id)
-          bb = int(correct[(xx, 0)].id)
-          cc = int(correct[(0, xx)].id)
-          dd = int(correct[(xx, xx)].id)
-          return aa * bb * cc * dd
+          return correct
 
   def rec_check(self, layout: dict[Coords, Image], order: ProcessOrder, step = 0):
     remaining = [node for node in self.all if node not in layout.values()]
@@ -176,6 +194,28 @@ class Collection:
 
       reqs[edge_id] = layout[nei].get_edge(edge_map[edge_id])
     return img.fits(reqs)
+
+  def build_images(self, layout):
+    res = {}
+
+    for yy in range(self.max + 1):
+      row_res = []
+      jj = 0
+      for xx in range(self.max + 1):
+        tmp = layout[(xx, yy)].correct_image()
+        # print(len(tmp))
+        for ii in range(1, len(tmp) - 1):
+          row_index = ii + jj * len(tmp) - 1
+          if row_index not in res:
+            res[row_index] = ""
+          res[row_index] += tmp[ii][1:-1]
+        jj += 1
+    full = Image("full_image", list(res.values()))
+
+    # for xx in full.flips:
+    #   print("\n".join(xx))
+    #   print("")
+    # exit()
 
 
 def parse_images(raw_input):
