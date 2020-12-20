@@ -1,24 +1,10 @@
 from copy import deepcopy
 from math import sqrt
 from itertools import combinations, product
+import re
 
 Coords = tuple[int, int]
 ProcessOrder = list[list[Coords]]
-
-mp = {
-  (0,0): '1951',
-  (1,0): '2311',
-  (2,0): '3079',
-
-  (0,1): '2729',
-  (1,1): '1427',
-  (2,1): '2473',
-
-  (0,2): '2971',
-  (1,2): '1489',
-  (2,2): '1171',
-}
-
 TT = 0 # top edge
 RR = 1 # right edge4
 BB = 2 # bottom edge
@@ -30,54 +16,115 @@ edge_map = {
   RR: LL,
 }
 
+raw_monster = """                  #
+#    ##    ##    ###
+ #  #  #  #  #  #   """
+monster_size = 0
+monster = []
+for line in raw_monster.split("\n"):
+  line = line.replace(" ", ".")
+  monster_size += line.count("#")
+  monster.append(re.compile("(?=(" + line + "))"))
+
+def find_monsters(img):
+  res = 0
+  # Not adapted to monsters taller than 3!
+  for ii in range(1, len(img) - 1):
+    m1 = [match.start(0) for match in monster[1].finditer(img[ii])]
+    # the middle line has the most # symbols, so should be the fastest to process
+    if len(m1) < 1:
+      continue
+
+    m0 = [match.start(0) for match in monster[0].finditer(img[ii-1])]
+    if len(m0) < 1:
+      continue
+
+    m2 = [match.start(0) for match in monster[0].finditer(img[ii+1])]
+    if len(m2) < 1:
+      continue
+
+    res += len([xx for xx in m0 if xx in m1 and xx in m2]) > 0
+
+  return res
+
+def count_roughness(img):
+  global monster_size
+  max_c = 0
+  total_artifacts = "".join(img).count("#")
+  max_monsters = 0
+  for ii in range(4):
+    # rotate
+    img = rotate(img)
+    max_monsters = max(max_monsters, find_monsters(img))
+
+    # flip by X axis
+    img = flipX(img)
+    max_monsters = max(max_monsters, find_monsters(img))
+
+    # flip by Y axis
+    img = flipY(img)
+    max_monsters = max(max_monsters, find_monsters(img))
+
+    # Flip back to original position
+    img = flipXY(img)
+    max_monsters = max(max_monsters, find_monsters(img))
+
+  return total_artifacts - max_monsters * monster_size
+
+def rotate(rows):
+  return ["".join([rows[yy][xx] for yy in range(len(rows) - 1, -1, -1)]) for xx in range(len(rows)) ]
+def flipX(rows):
+  return [rows[yy] for yy in range(len(rows) - 1, -1, -1)]
+def flipY(rows):
+  return [row[::-1] for row in rows]
+def flipXY(rows):
+  return flipX(flipY(rows))
+def calc_edge(rows):
+  return {
+    TT: rows[0], # top
+    RR: "".join([row[-1] for row in rows]), # right
+    BB: rows[-1], # bottom
+    LL: "".join([row[0] for row in rows]), # left
+  }
+
 class Image:
   def __init__(self, img_id, content):
     self.id = img_id
-    self.content = content
+    self.content = []
+    self.combos = []
 
     l_x, l_y = len(content[0]), len(content)
     if l_x != l_y:
       raise Exception("Mismatched image dimensions")
 
-    edges = {
-      TT: content[0], # top
-      RR: "".join([row[-1] for yy, row in enumerate(content)]), # right
-      BB: content[-1], # bottom
-      LL: "".join([row[0] for yy, row in enumerate(content)]), # left
-    }
+    for ii in range(4):
+      # rotate
+      content = rotate(content)
+      edges = calc_edge(content)
+      if edges not in self.combos:
+        self.combos.append(edges)
+        self.content.append(content)
 
-    self.combos = [
-      { TT: edges[TT][:], RR: edges[RR][:], BB: edges[BB][:], LL: edges[LL][:] },
-      { TT: edges[BB][:], RR: edges[RR][::-1], BB: edges[TT][:], LL: edges[LL][::-1] }, # X-axis flip
-      { TT: edges[TT][::-1], RR: edges[LL][:], BB: edges[BB][::-1], LL: edges[RR][:] }, # Y-axis flip
-      { TT: edges[BB][::-1], RR: edges[LL][::-1], BB: edges[TT][::-1], LL: edges[RR][::-1] }, # double axis flip
-    ]
+      # flip by X axis
+      content = flipX(content)
+      edges = calc_edge(content)
+      if edges not in self.combos:
+        self.combos.append(edges)
+        self.content.append(content)
 
-    self.flips = [
-      deepcopy(self.content),
-      [row for row in self.content[::-1]],
-      [row[::-1] for row in self.content],
-      [row[::-1] for row in self.content[::-1]],
-    ]
+      # flip by Y axis
+      content = flipY(content)
+      edges = calc_edge(content)
+      if edges not in self.combos:
+        self.combos.append(edges)
+        self.content.append(content)
 
-    for jj in range(4):
-      tmp = deepcopy(self.combos[jj])
-      img_tmp = deepcopy(self.flips[jj])
-      for ii in range(1,4):
-        tmp = { (xx + 1) % 4: tmp[xx] for xx in tmp }
-        tmp[TT] = tmp[TT][::-1]
-        tmp[BB] = tmp[BB][::-1]
-        new_img = []
-        for xx in range(l_x):
-          new_row = ""
-          for yy in range(l_y):
-            new_row += img_tmp[l_y - 1 - yy][xx]
-          new_img.append(new_row)
-        img_tmp = new_img
-
-        if tmp not in self.combos:
-          self.combos.append(tmp)
-          self.flips.append(img_tmp)
+      # Flip back to original position
+      content = flipXY(content)
+      edges = calc_edge(content)
+      if edges not in self.combos:
+        self.combos.append(edges)
+        self.content.append(content)
 
     self.active = self.combos[0]
 
@@ -99,7 +146,7 @@ class Image:
     return self
 
   def correct_image(self):
-    return self.flips[self.combos.index(self.active)]
+    return self.content[self.combos.index(self.active)]
 
 class Collection:
   def __init__(self):
@@ -196,26 +243,23 @@ class Collection:
     return img.fits(reqs)
 
   def build_images(self, layout):
-    res = {}
-
+    max_ii = None
+    res = []
     for yy in range(self.max + 1):
-      row_res = []
-      jj = 0
+      sub_results = []
       for xx in range(self.max + 1):
-        tmp = layout[(xx, yy)].correct_image()
-        # print(len(tmp))
-        for ii in range(1, len(tmp) - 1):
-          row_index = ii + jj * len(tmp) - 1
-          if row_index not in res:
-            res[row_index] = ""
-          res[row_index] += tmp[ii][1:-1]
-        jj += 1
-    full = Image("full_image", list(res.values()))
+        rows = layout[(yy,xx)].correct_image()
+        if not max_ii:
+          max_ii = len(rows)
+        sub_results.append(rows)
 
-    # for xx in full.flips:
-    #   print("\n".join(xx))
-    #   print("")
-    # exit()
+
+      for xy in range(1, max_ii - 1):
+        res.append("")
+        for segment in sub_results:
+          res[-1] += segment[xy][1:-1]
+
+    return res
 
 
 def parse_images(raw_input):
