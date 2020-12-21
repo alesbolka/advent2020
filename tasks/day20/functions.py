@@ -3,8 +3,6 @@ from math import sqrt
 from itertools import combinations, product
 import re
 
-Coords = tuple[int, int]
-ProcessOrder = list[list[Coords]]
 TT = 0 # top edge
 RR = 1 # right edge4
 BB = 2 # bottom edge
@@ -16,69 +14,32 @@ edge_map = {
   RR: LL,
 }
 
-raw_monster = """                  #
-#    ##    ##    ###
- #  #  #  #  #  #   """
-monster_size = 0
-monster = []
-for line in raw_monster.split("\n"):
-  line = line.replace(" ", ".")
-  monster_size += line.count("#")
-  monster.append(re.compile("(?=(" + line + "))"))
+def parse_input(raw_input):
+  can = Canvas()
+  title = ""
+  img_rows = []
 
-def find_monsters(img):
-  res = 0
-  # Not adapted to monsters taller than 3!
-  for ii in range(1, len(img) - 1):
-    m1 = [match.start(0) for match in monster[1].finditer(img[ii])]
-    # the middle line has the most # symbols, so should be the fastest to process
-    if len(m1) < 1:
-      continue
+  for row in raw_input:
+    if row.strip() == "":
+      can.add(Image(title, img_rows))
+      title = ""
+      img_rows = []
+    elif row.startswith("Tile "):
+      title = row[5:-1]
+    else:
+      img_rows.append(row)
 
-    m0 = [match.start(0) for match in monster[0].finditer(img[ii-1])]
-    if len(m0) < 1:
-      continue
+  if len(title) > 0:
+    can.add(Image(title, img_rows))
 
-    m2 = [match.start(0) for match in monster[0].finditer(img[ii+1])]
-    if len(m2) < 1:
-      continue
-
-    res += len([xx for xx in m0 if xx in m1 and xx in m2]) > 0
-
-  return res
-
-def count_roughness(img):
-  global monster_size
-  max_c = 0
-  total_artifacts = "".join(img).count("#")
-  max_monsters = 0
-  for ii in range(4):
-    # rotate
-    img = rotate(img)
-    max_monsters = max(max_monsters, find_monsters(img))
-
-    # flip by X axis
-    img = flipX(img)
-    max_monsters = max(max_monsters, find_monsters(img))
-
-    # flip by Y axis
-    img = flipY(img)
-    max_monsters = max(max_monsters, find_monsters(img))
-
-    # Flip back to original position
-    img = flipXY(img)
-    max_monsters = max(max_monsters, find_monsters(img))
-
-  return total_artifacts - max_monsters * monster_size
+  return can
 
 def rotate(rows):
   return ["".join([rows[yy][xx] for yy in range(len(rows) - 1, -1, -1)]) for xx in range(len(rows)) ]
-def flipX(rows):
+
+def flip(rows):
   return [rows[yy] for yy in range(len(rows) - 1, -1, -1)]
-def flipY(rows):
-  return [row[::-1] for row in rows]
-def flipXY(rows):
-  return flipX(flipY(rows))
+
 def calc_edge(rows):
   return {
     TT: rows[0], # top
@@ -87,199 +48,217 @@ def calc_edge(rows):
     LL: "".join([row[0] for row in rows]), # left
   }
 
+expected = """.#.#..#.##...#.##..#####
+###....#.#....#..#......
+##.##.###.#.#..######...
+###.#####...#.#####.#..#
+##.#....#.##.####...#.##
+...########.#....#####.#
+....#..#...##..#.#.###..
+.####...#..#.....#......
+#..#.##..#..###.#.##....
+#.####..#.####.#.#.###..
+###.#.#...#.######.#..##
+#.####....##..########.#
+##..##.#...#...#.#.#.#..
+...#..#..#.#.##..###.###
+.#.#....#.##.#...###.##.
+###.#...#..#.##.######..
+.#.#.###.##.##.#..#.##..
+.####.###.#...###.#..#.#
+..#.#..#..#.#.#.####.###
+#..####...#.#.#.###.###.
+#####..#####...###....##
+#.##..#..#...#..####...#
+.#.###..##..##..####.##.
+...###...##...#...#..###"""
+
 class Image:
   def __init__(self, img_id, content):
     self.id = img_id
     self.content = []
-    self.combos = []
+    self.orientation = 0
 
-    l_x, l_y = len(content[0]), len(content)
-    if l_x != l_y:
-      raise Exception("Mismatched image dimensions")
+    for _ in range(2):
+      content = flip(content)
+      for _ in range(4):
+        content = rotate(content)
+        self.content.append({ "content": content, "edges": calc_edge(content) })
 
-    for ii in range(4):
-      # rotate
-      content = rotate(content)
-      edges = calc_edge(content)
-      if edges not in self.combos:
-        self.combos.append(edges)
-        self.content.append(content)
-
-      # flip by X axis
-      content = flipX(content)
-      edges = calc_edge(content)
-      if edges not in self.combos:
-        self.combos.append(edges)
-        self.content.append(content)
-
-      # flip by Y axis
-      content = flipY(content)
-      edges = calc_edge(content)
-      if edges not in self.combos:
-        self.combos.append(edges)
-        self.content.append(content)
-
-      # Flip back to original position
-      content = flipXY(content)
-      edges = calc_edge(content)
-      if edges not in self.combos:
-        self.combos.append(edges)
-        self.content.append(content)
-
-    self.active = self.combos[0]
-
-  def get_edge(self, direction):
-    return self.active[direction]
-
-  def fits(self, reqs: dict[int, list[int]]):
-    matches = []
-    for layout in self.combos:
-      if reqs == { req_dir: layout[req_dir] for req_dir in reqs }:
-        matches.append(layout)
-
-    return matches
-
-  def lock(self, orientation):
-    if orientation not in self.combos:
-      raise Exception("invalid orientation used")
-    self.active = orientation
+  def reset(self):
+    self.orientation = 0
     return self
 
-  def correct_image(self):
-    return self.content[self.combos.index(self.active)]
+  def iterate(self):
+    for ii in range(len(self.content)):
+      self.orientation = ii
+      yield ii
 
-class Collection:
+  def check(self, pos, neighbours):
+    # dr = direction nei is in relative to pos
+    for dr, nei, img in neighbours:
+      my_edge = self.get_edge(dr)
+      other_edge = img.get_edge(edge_map[dr])
+      if my_edge != other_edge:
+        return False
+    return True
+
+  def get_edge(self, side):
+    return self.content[self.orientation]["edges"][side]
+
+  def get_current(self, join = False):
+    if join:
+      return "\n".join(self.content[self.orientation]["content"])
+    return self.content[self.orientation]["content"]
+
+class Canvas:
   def __init__(self):
-    self.all: list[Image] = []
+    self.imgs = []
+    self.neighbours = {}
 
   def add(self, img):
-    self.all.append(img)
+    self.imgs.append(img)
 
   def compose(self):
-    dimension = int(sqrt(len(self.all)))
-    if dimension ** 2 != len(self.all):
+    self.prep_grid()
+    res = self.recurse({}, self.order[:])
+    if not res:
+      return None
+
+    return self.glue(res)
+
+  def prep_grid(self):
+    dimension = int(sqrt(len(self.imgs)))
+    if dimension ** 2 != len(self.imgs):
       # Sensitive due to float btw, might error unnecessarily
-      print("{:0.2f} is not a valid dimension (sqrt of {})".format(dimension, len(self.all)))
+      print("{:0.2f} is not a valid dimension (sqrt of {})".format(dimension, len(self.imgs)))
       raise Exception("Invalid input")
 
-    self.coords: list[Coords] = list(product(range(0, dimension), range(0, dimension)))
-    self.neighbours: dict[Coords, dict[int, Coords]] = {}
-    self.max = dimension - 1
-
+    self.dimension = dimension
+    self.coords = list(product(range(0, dimension), range(0, dimension)))
+    self.neighbours = {}
     for node in self.coords:
       xx, yy = node
       self.neighbours[node] = {pos: node for pos, node in {LL: (xx-1, yy), RR: (xx+1, yy), TT: (xx, yy-1), BB: (xx, yy+1)}.items() if node in self.coords}
-    center = (int(dimension/2), int(dimension/2))
-    # We can always rotate this one with the entire composition if it matches, so its orientation does not matter
-    self.coords.remove(center)
 
-    order = self.get_order(center)
-    layout = self.full_check(center, order)
-    if not layout:
-      return None
+    center = int(dimension / 2)
 
-    img = self.build_images(layout)
+    self.order = [(center, center)]
 
-    aa = int(layout[(0, 0)].id)
-    bb = int(layout[(self.max, 0)].id)
-    cc = int(layout[(0, self.max)].id)
-    dd = int(layout[(self.max, self.max)].id)
-
-    return (aa * bb * cc * dd, img)
-
-  def get_order(self, start: Coords) -> ProcessOrder:
-    order = []
-    limit = len(self.coords) + 1
-
-    todo = [start]
+    todo = [(center, center)]
     while len(todo) > 0:
       node = todo.pop(0)
       for ngb in self.neighbours[node].values():
-        if ngb not in order:
-          order.append(ngb)
+        if ngb not in self.order:
+          self.order.append(ngb)
           todo.append(ngb)
 
-    order.remove(start)
-
-    return order
-
-  def full_check(self, center: Coords, order: ProcessOrder):
-    for parent in self.all:
-      for src in parent.combos:
-        layout = {
-          center: parent.lock(src),
-        }
-        correct = self.rec_check(layout, order)
-        if correct:
-          return correct
-
-  def rec_check(self, layout: dict[Coords, Image], order: ProcessOrder, step = 0):
-    remaining = [node for node in self.all if node not in layout.values()]
-    if step >= len(order):
+  def recurse(self, layout, order):
+    if len(order) < 1:
       return layout
-    pos = order[step]
+    l2 = layout.copy()
 
+    pos = order[0]
+    remaining = [img for img in self.imgs if img not in l2.values()]
+    current_neighbours = [(dr, px, l2[px]) for dr, px in self.neighbours[pos].items() if px in l2]
     for img in remaining:
-      fits = self.possible_fits(layout, pos, img)
-      if len(fits) < 1:
-        # img cannot fit into this position
-        continue
+      l2[pos] = img.reset()
+      for _ in img.iterate():
+        if img.check(pos, current_neighbours):
+          res = self.recurse(l2, order[1:])
+          if res:
+            return res
 
-      for fit in fits:
-        l2 = layout.copy()
-        l2[pos] = img.lock(fit)
-        res = self.rec_check(l2, order, step + 1)
-        if res:
-          return res
+    return None
 
-  def possible_fits(self, layout: dict[Coords, Image], node: Coords, img: Image):
-    reqs = {}
-    for edge_id, nei in self.neighbours[node].items():
-      if nei not in layout:
-        # Nothing there yet, automatic pass
-        continue
-
-      reqs[edge_id] = layout[nei].get_edge(edge_map[edge_id])
-    return img.fits(reqs)
-
-  def build_images(self, layout):
-    max_ii = None
+  def glue(self, layout):
+    multi = (
+      int(layout[0, 0].id) *
+      int(layout[self.dimension - 1, 0].id) *
+      int(layout[0, self.dimension - 1].id) *
+      int(layout[self.dimension - 1, self.dimension - 1].id)
+    )
     res = []
-    for yy in range(self.max + 1):
-      sub_results = []
-      for xx in range(self.max + 1):
-        rows = layout[(yy,xx)].correct_image()
-        if not max_ii:
-          max_ii = len(rows)
-        sub_results.append(rows)
+    for xx in range(self.dimension):
+      row = []
+      for yy in range(self.dimension):
+        img = layout[(xx, yy)].get_current()
+        for img_row in img[1:-1]:
+          row.append(img_row[1:-1])
+      if len(res) < 1:
+        res += row
+      else:
+        for ii in range(len(row)):
+          res[ii] += row[ii]
+
+    return Image("{}".format(multi), res)
+
+raw_monster = """                  #
+#    ##    ##    ###
+ #  #  #  #  #  #   """
+
+def find_monsters(image: Image):
+  monster = [
+    re.compile(r"(?=(.{18}#.))"),
+    re.compile(r"(?=(#.{4}##.{4}##.{4}###))"),
+    re.compile(r"(?=(.#..#..#..#..#..#...))"),
+  ]
+  monster_size = 15
+  wave_count = image.get_current(True).count("#")
+  max_res = 0
+
+  for _ in image.iterate():
+    img = image.get_current()
+    res = 0
+    for ii in range(1, len(img) - 1):
+      # This regex is the most restrictive, so it will rule out the most errors
+      m1 = [match.start(0) for match in monster[1].finditer(img[ii])]
+      if len(m1) < 1:
+        continue
+
+      m2 = [match.start(0) for match in monster[2].finditer(img[ii+1])]
+      if len(m2) < 1:
+        continue
+
+      m0 = [match.start(0) for match in monster[0].finditer(img[ii-1])]
+      if len(m0) < 1:
+        continue
+
+      for xx in m1:
+        if xx not in m0 or xx not in m2:
+          continue
+        res += 1
+
+    max_res = max(res, max_res)
+
+  return wave_count - monster_size * max_res
 
 
-      for xy in range(1, max_ii - 1):
-        res.append("")
-        for segment in sub_results:
-          res[-1] += segment[xy][1:-1]
+def find_monsters_dynamic(img: Image, pattern):
+  raise Exception("Does not work")
+  monster_size = 0
+  monster = []
+  for line in pattern.split("\n"):
+    line = line.replace(" ", ".")
+    monster_size += line.count("#")
+    monster.append(re.compile("(?=(" + line + "))"))
+  scan_range = range(len(monster))
+  offset = len(monster) - 1
+  wave_count = img.get_current(True).count("#")
 
-    return res
+  for _ in img.iterate():
+    lines = img.get_current()
+    monsters = 0
+    for ii in range(len(lines)):
+      if ii < len(monster) -1:
+        continue
 
+      matches = []
+      for jj in scan_range:
+        scan_index = ii - offset + jj
+        matches.append([match.start(0) for match in monster[jj].finditer(lines[scan_index])])
 
-def parse_images(raw_input):
-  img_id = ""
-  img = []
-  imgs = Collection()
-  for row in raw_input:
-    if row.startswith("Tile "):
-      img_id = row[5:-1]
-      continue
-    elif len(row) < 1:
-      imgs.add(Image(img_id, img))
-      img_id = ""
-      img = []
-      continue
+      if len([xx for xx in matches[0] for other in matches[1:] if xx in other]) > 0:
+        monsters +=1
 
-    img.append(row)
-
-  if img_id != "":
-    imgs.add(Image(img_id, img))
-    img_id = ""
-    img = []
-  return imgs
+  return wave_count - monsters * monster_size
