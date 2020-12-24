@@ -1,50 +1,73 @@
+class Cup:
+  def __init__(self, label):
+    self.label = label
+    self.next = None
+
 class Game:
   def __init__(self, initial, min_lenght = 0):
-    self.cups = [int(ch) for ch in initial]
-    current = max(self.cups)
-    while len(self.cups) < min_lenght:
-      current += 1
-      self.cups.append(current)
+    self.cups = {}
+    prev = None
+    ii = 0
+    min_lenght = max(min_lenght, len(initial))
 
-    self.current = self.cups[0]
-    self.min = min(self.cups)
-    self.max = max(self.cups)
-    self.len = len(self.cups)
+    while ii < min_lenght:
+      if ii < len(initial):
+        ch = int(initial[ii])
+      else:
+        ch = ii + 1
+
+      cur = Cup(ch)
+      self.cups[ch] = cur
+      if prev:
+        prev.next = cur
+      else:
+        self.current = cur
+        self.min = ch
+        self.max = ch
+
+      self.min = min(self.min, ch)
+      self.max = max(self.max, ch)
+
+      prev = cur
+      ii += 1
+
+    self.cups[prev.label].next = self.current
 
   def play(self, moves = 100):
     for ii in range(moves):
       self.move()
-    return self.get_label()
 
   def move(self):
     removed = []
 
     for ii in range(3):
-      remove_index = (self.cups.index(self.current) + 1) % len(self.cups)
-      removed.append(self.cups.pop(remove_index))
+      removed.append(self.current.next.label)
+      self.current.next = self.current.next.next
 
-    label = self.current - 1
+    label = self.current.label - 1
 
-    while label not in self.cups:
+    while label in removed or label not in self.cups:
       label -= 1
       if label < self.min:
         label = self.max
 
-    destination = self.cups.index(label)
-    self.cups = (
-      self.cups[:destination + 1] +
-      removed +
-      self.cups[destination + 1:]
-    )
+    for ii in removed:
+      tmp = self.cups[label].next
+      self.cups[label].next = self.cups[ii]
+      self.cups[ii].next = tmp
+      label = ii
 
-    next_index = (self.cups.index(self.current) + 1) % self.len
-    self.current = self.cups[next_index]
+    self.current = self.current.next
 
-  def get_label(self):
-    index1 = self.cups.index(1)
+  def part1_label(self):
     res = ""
-    for ii in range(1, self.len):
-      res += str(self.cups[(ii + index1) % self.len])
+    nxt = self.cups[1].next
 
+    while nxt != self.cups[1]:
+      res += str(nxt.label)
+      nxt = nxt.next
     return res
-    # return ""
+
+  def part2_label(self):
+    nxt = self.cups[1].next
+    return nxt.label * nxt.next.label

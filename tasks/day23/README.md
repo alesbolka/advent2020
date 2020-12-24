@@ -1,0 +1,1 @@
+Did think of a workable solution for part 2 on my own, was told to make a linked list by a friend.
